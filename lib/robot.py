@@ -1,7 +1,9 @@
 import pygame
+from math import sqrt
+from lib.ui import Window
 
 class Robot:
-    def __init__(self, window):
+    def __init__(self, window: Window):
         self.speed = 0
         self.max_speed = 60
         self.turn_speed = 0
@@ -9,30 +11,16 @@ class Robot:
         self.window = window
 
         self.gyro = 0
-        self.us = [0] * 6
+        self.us = [200] * 6
+        self.us_max_dist = 200
         
     
     def draw(self):
-        pygame.draw.rect(self.window.screen, (217, 217, 217), (175, 340, 100, 190), border_radius=20)
-        if self.us[0] < 150:
-            pygame.draw.line(self.window.screen, (217, 217, 217), (170-self.us[0], 435), (175, 435), 2)
-            pygame.draw.circle(self.window.screen, (217, 217, 217), (170-self.us[0], 435), 5)
-        else:
-            pygame.draw.line(self.window.screen, (217, 217, 217), (20, 435), (175, 435), 2)
-            pygame.draw.circle(self.window.screen, (217, 217, 217), (20, 435), 5)
+        pygame.draw.rect(self.window.screen, (217, 217, 217), (175, 255, 100, 190), border_radius=20)
 
-        if self.us[1] < 150:
-            pygame.draw.line(self.window.screen, (217, 217, 217), (275, 435), (280+self.us[1], 435), 2)
-            pygame.draw.circle(self.window.screen, (217, 217, 217), (280+self.us[1], 435), 5)
-        else:
-            pygame.draw.line(self.window.screen, (217, 217, 217), (275, 435), (430, 435), 2)
-            pygame.draw.circle(self.window.screen, (217, 217, 217), (430, 435), 5)
-        
-        if self.us[2] < 150:
-            pygame.draw.line(self.window.screen, (217, 217, 217), (225, 530), (225, 535+self.us[2]), 2)
-            pygame.draw.circle(self.window.screen, (217, 217, 217), (225, 535+self.us[2]), 5)
-        else:
-            pygame.draw.line(self.window.screen, (217, 217, 217), (225, 530), (225, 685), 2)
-            pygame.draw.circle(self.window.screen, (217, 217, 217), (225, 685), 5)
-
-        
+        self.window.draw_line((200, 255), -45, self.us[0] if self.us[0] < self.us_max_dist else self.us_max_dist)
+        self.window.draw_line((225, 255), 0, self.us[1] if self.us[1] < self.us_max_dist else self.us_max_dist)
+        self.window.draw_line((250, 255), 45, self.us[2] if self.us[2] < self.us_max_dist else self.us_max_dist)
+        self.window.draw_line((175, 350), -90, self.us[3] if self.us[3] < self.us_max_dist else self.us_max_dist)
+        self.window.draw_line((275, 350), 90, self.us[4] if self.us[4] < self.us_max_dist else self.us_max_dist)
+        self.window.draw_line((225, 445), 180, self.us[5] if self.us[5] < self.us_max_dist else self.us_max_dist)

@@ -52,7 +52,7 @@ class Video:
             pygame.draw.rect(self.window.screen, (0, 0, 0),
                              (x, y, width, height), 1)
 
-    def get_binary(self, width=320):
+    def get_binary(self, width=200):
         self.binary = self.frame
         self.binary = imutils.resize(self.binary, width=width)
         self.binary = pickle.dumps(self.binary)

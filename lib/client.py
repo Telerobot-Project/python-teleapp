@@ -7,9 +7,12 @@ from lib.robot import Robot
 
 
 class Client:
-    def __init__(self, user_video: Video, usb_video: Video, tof_video: Video, robot: Robot):
-        self.host = '192.168.43.161'  # '192.168.1.189'
-        self.port = 5050
+    def __init__(self, user_video: Video, usb_video: Video, tof_video: Video, robot: Robot, host: str = None, port: int = 5050):
+        if host is not None:
+            self.host = host
+        else:
+            self.host = socket.gethostbyname(socket.gethostname())
+        self.port = port
         self.addr = (self.host, self.port)
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.connected = False
@@ -62,7 +65,7 @@ class Client:
 
     def receive_data(self):
         while len(self.data) < calcsize("iiiiiii"):
-            self.data += self.socket.recv(4*1024)
+            self.data += self.socket.recv(16*1024)
 
         self.robot.gyro, self.robot.us[0], self.robot.us[1], self.robot.us[2], self.robot.us[3], self.robot.us[4], self.robot.us[5] = struct.unpack(
             "iiiiiii", self.data[:calcsize("iiiiiii")])
@@ -70,14 +73,14 @@ class Client:
 
     def receive_video(self, video_obj: Video):
         while len(self.data) < self.payload_size:
-            self.data += self.socket.recv(4*1024)
+            self.data += self.socket.recv(16*1024)
 
         packed_msg_size = self.data[:self.payload_size]
         self.data = self.data[self.payload_size:]
         msg_size = struct.unpack("Q", packed_msg_size)[0]
 
         while len(self.data) < msg_size:
-            self.data += self.socket.recv(4*1024)
+            self.data += self.socket.recv(16*1024)
 
         video_obj.binary = self.data[:msg_size]
         self.data = self.data[msg_size:]

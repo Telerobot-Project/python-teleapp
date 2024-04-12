@@ -89,7 +89,7 @@ class Window:
         self.keyboard.read()
 
     def update(self):
-        # self.clock.tick(15)
+        self.clock.tick(20)
         pygame.display.update()
 
     def close(self):
@@ -102,11 +102,22 @@ class Window:
     def draw_text(self, text, x, y, color):
         self.screen.blit(self.font.render(text, True, color), (x, y))
 
-    def draw_multi_line(self, lines, x, y):
+    def draw_multi_text(self, lines, x, y):
         for i, l in enumerate(lines):
             self.draw_text(l, x, y + 20*i, (217, 217, 217))
 
-    def draw_line(self, x1, y1, x2, y2, color):
+    def draw_line(self, start_coord, angle, distance, color = (217, 217, 217), width = 1, dash = 0, end = True):
+        angle = math.radians(angle)
+        if dash:
+            for i in range(math.round(distance / dash)):
+                if i % 2 == 0:
+                    pygame.draw.line(self.screen, color, start_coord, (start_coord[0] + math.sin(angle) * i * dash, start_coord[1] - math.cos(angle) * i * dash), width)
+        else:
+            pygame.draw.line(self.screen, color, start_coord, (start_coord[0] + math.sin(angle) * distance, start_coord[1] - math.cos(angle) * distance), width)
+        if end:
+            pygame.draw.circle(self.screen, color, (start_coord[0] + math.sin(angle) * distance, start_coord[1] - math.cos(angle) * distance), 5)
+
+    def draw_text(self, x1, y1, x2, y2, color):
         pygame.draw.line(self.screen, color, (x1, y1), (x2, y2), 5)
     
     def draw_video(self, image, x, y):
@@ -179,6 +190,7 @@ class Button:
         self.color = color
         self.window: Window = window
         self.clicked = False
+        self.down = False
 
     def draw(self):
         pygame.draw.rect(self.window.screen, self.color, (self.x, self.y, self.w, self.h), border_radius=5)
@@ -187,6 +199,9 @@ class Button:
         if self.window.mouse.left_down:
             if self.window.mouse.is_in_rect(self.x, self.y, self.w, self.h):
                 self.clicked = True
+                self.down = True
                 print('Click')
         else:
             self.clicked = False
+        if not self.window.mouse.left:
+            self.down = False
