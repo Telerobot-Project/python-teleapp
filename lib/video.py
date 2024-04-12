@@ -6,21 +6,28 @@ import imutils
 
 
 class Video:
-    def __init__(self, window):
+    def __init__(self, window, crop=None):
         self.frame = None
         self.surface = None
         self.binary = None
         self.window = window
         self.new_data = False
+        self.crop = crop
 
     def start(self, i=0):
         self.obj = cv2.VideoCapture(i)
-        self.width = int(self.obj.get(cv2.CAP_PROP_FRAME_WIDTH))
-        self.height = int(self.obj.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        if self.crop is None:
+            self.width = int(self.obj.get(cv2.CAP_PROP_FRAME_WIDTH))
+            self.height = int(self.obj.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        else:
+            self.width = self.crop[2]
+            self.height = self.crop[3]
 
     def read(self):
         if self.obj.isOpened():
             _, self.frame = self.obj.read()
+            if self.crop is not None:
+                self.frame = self.frame[self.crop[1]:self.crop[1]+self.crop[3], self.crop[0]:self.crop[0]+self.crop[2]]
             if self.frame is not None:
                 self.new_data = True
         return self.frame
