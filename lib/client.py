@@ -1,102 +1,148 @@
+"""A socket client for communicating with the robot via a binary protocol.
+
+Packets received from the robot have the following structure:
+    int        : gyroscope measurement
+    int[6]     : ultrasonic sensor measurements
+    ulong long : size of the video data
+    ...        : video data
+
+Packets sent to the robot have the following structure:
+    int        : robot movement speed
+    int        : robot direction
+    int        : robot rotation speed
+    ulong long : size of the video data
+    ...        : video data
+
+"""
+
+import logging
 import socket
 import struct
-from struct import calcsize
 import threading
-from lib.video import Video
-from lib.robot import Robot
+from struct import calcsize
+from typing import NamedTuple
+
+from .robot import Robot
+from .video import Video
+
+
+class ConnectionInfo(NamedTuple):
+    """IP address and port of the robot."""
+
+    host: str = "localhost"
+    port: int = 5050
+
+
+class RobotVideo(NamedTuple):
+    """A bundle of camera video and ToF video from the robot."""
+
+    camera: Video
+    tof: Video
 
 
 class Client:
-    def __init__(self, user_video: Video, usb_video: Video, tof_video: Video, robot: Robot, host: str = None, port: int = 5050):
-        if host is not None:
-            self.host = host
-        else:
-            self.host = socket.gethostbyname(socket.gethostname())
-        self.port = port
-        self.addr = (self.host, self.port)
+    """A socket client for communicating with the robot via a binary protocol."""
+
+    def __init__(
+        self,
+        user_video: Video,
+        robot_video: RobotVideo,
+        robot: Robot,
+        host: ConnectionInfo,
+    ) -> None:
+        """Initialize the socket client."""
+        self.host = host
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.connected = False
         self.run = True
 
         self.user_video = user_video
-        self.usb_video = usb_video
-        self.tof_video = tof_video
+        self.robot_video = robot_video
         self.robot = robot
 
-        self.data = b''
-        self.send_buffer = b''
-        self.payload_size = struct.calcsize("Q")
+        self.data = b""
 
-    def start(self):
-        self.start_thread = threading.Thread(target=self.start_connection)
-        self.start_thread.start()
+        threading.Thread(target=self.__start_connection).start()
 
-    def start_connection(self):
-        self.connected = False
-        print('Connecting to server...')
-        self.socket.connect(self.addr)
-        print('Connected to server')
-        self.connected = True
+    def __start_connection(self) -> None:
+        """Connect to the robot."""
+        logging.info("Connecting to server...")
+        self.socket.connect(self.host)
+        logging.info("Connected to server")
 
-        self.read_thread = threading.Thread(target=self.read_loop)
-        self.read_thread.start()
+        threading.Thread(target=self.__read_loop).start()
+        threading.Thread(target=self.__send_loop).start()
 
-        self.send_thread = threading.Thread(target=self.send_loop)
-        self.send_thread.start()
-
-    def read_loop(self):
+    def __read_loop(self) -> None:
+        """Loop that receives data from the robot."""
         while self.run:
             try:
-                self.receive_data()
-                self.receive_video(self.usb_video)
+                self.__receive_data()
+                self.__receive_video(self.robot_video.camera)
 
-                self.usb_video.unpack()
-            except:
-                pass
+                self.robot_video.camera.unpack()
+            except Exception:
+                logging.exception("Error while running the read loop")
 
-    def send_loop(self):
+    def __receive_data(self) -> None:
+        """Receive robot state (location, rotation, etc)."""
+        data_size = calcsize("iiiiiii")
+
+        while len(self.data) < data_size:
+            self.data += self.socket.recv(16 * 1024)
+
+        (
+            self.robot.gyro,
+            self.robot.us[0],
+            self.robot.us[1],
+            self.robot.us[2],
+            self.robot.us[3],
+            self.robot.us[4],
+            self.robot.us[5],
+        ) = struct.unpack("iiiiiii", self.data[:data_size])
+        self.data = self.data[data_size:]
+
+    def __receive_video(self, video: Video) -> None:
+        """Receive camera video from the robot."""
+        header_size = struct.calcsize("Q")
+
+        while len(self.data) < header_size:
+            self.data += self.socket.recv(16 * 1024)
+
+        video_size = struct.unpack("Q", self.data[:header_size])[0]
+        self.data = self.data[header_size:]
+
+        while len(self.data) < video_size:
+            self.data += self.socket.recv(16 * 1024)
+
+        video.binary = self.data[:video_size]
+        self.data = self.data[video_size:]
+
+    def __send_loop(self) -> None:
+        """Loop that sends data to the robot."""
         while self.run:
             try:
                 if self.user_video.new_data:
-                    self.send_data()
+                    self.__send_data()
                     self.user_video.new_data = False
-            except:
-                pass
+            except Exception:
+                logging.exception("Error while running the send loop")
 
-    def receive_data(self):
-        while len(self.data) < calcsize("iiiiiii"):
-            self.data += self.socket.recv(16*1024)
+    def __send_data(self) -> None:
+        """Send user video over the socket."""
+        self.user_video.pack()
 
-        self.robot.gyro, self.robot.us[0], self.robot.us[1], self.robot.us[2], self.robot.us[3], self.robot.us[4], self.robot.us[5] = struct.unpack(
-            "iiiiiii", self.data[:calcsize("iiiiiii")])
-        self.data = self.data[calcsize("iiiiiii"):]
+        packet = struct.pack(
+            "iii",
+            self.robot.speed,
+            self.robot.direction,
+            self.robot.turn_speed,
+        )
+        packet += struct.pack("Q", len(self.user_video.binary))
+        packet += self.user_video.binary
 
-    def receive_video(self, video_obj: Video):
-        while len(self.data) < self.payload_size:
-            self.data += self.socket.recv(16*1024)
+        self.socket.sendall(packet)
 
-        packed_msg_size = self.data[:self.payload_size]
-        self.data = self.data[self.payload_size:]
-        msg_size = struct.unpack("Q", packed_msg_size)[0]
-
-        while len(self.data) < msg_size:
-            self.data += self.socket.recv(16*1024)
-
-        video_obj.binary = self.data[:msg_size]
-        self.data = self.data[msg_size:]
-
-    def send_data(self):
-        self.user_video.get_binary()
-
-        self.send_buffer = b''
-        self.send_buffer += struct.pack('iii', self.robot.speed,
-                                        self.robot.direction, self.robot.turn_speed)
-        self.send_buffer += struct.pack("Q", len(self.user_video.binary))
-        self.send_buffer += self.user_video.binary
-
-        self.socket.sendall(self.send_buffer)
-
-    def close(self):
+    def close(self) -> None:
+        """Close the socket connection."""
         self.run = False
-        self.connected = False
         self.socket.close()
